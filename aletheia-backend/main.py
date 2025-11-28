@@ -1,0 +1,104 @@
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
+import os
+from dotenv import load_dotenv
+
+from services.image_processor import process_image
+from services.classifier import classify_misinformation
+
+load_dotenv()
+
+app = FastAPI(title="Aletheia - Misinformation Detection API")
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class TextMessage(BaseModel):
+    text: str
+
+
+class MisinformationResponse(BaseModel):
+    is_misinformation: bool
+    confidence: float
+    extracted_text: Optional[str] = None
+    image_description: Optional[str] = None
+    message_type: str
+
+
+@app.get("/")
+async def root():
+    return {"message": "Aletheia Misinformation Detection API", "status": "running"}
+
+
+@app.post("/analyze/text", response_model=MisinformationResponse)
+async def analyze_text(message: TextMessage):
+    """
+    Analyze text message for misinformation
+    """
+    result = classify_misinformation(message.text)
+
+    return MisinformationResponse(
+        is_misinformation=result["is_misinformation"],
+        confidence=result["confidence"],
+        message_type="text",
+    )
+
+
+@app.post("/analyze/image", response_model=MisinformationResponse)
+async def analyze_image(file: UploadFile = File(...)):
+    """
+    Analyze image for misinformation using OCR and image description
+    """
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+
+    image_data = await file.read()
+
+    try:
+        image_result = await process_image(image_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+
+    combined_text = f"{image_result['ocr_text']} {image_result['description']}"
+
+    result = classify_misinformation(combined_text)
+
+    return MisinformationResponse(
+        is_misinformation=result["is_misinformation"],
+        confidence=result["confidence"],
+        extracted_text=image_result["ocr_text"],
+        image_description=image_result["description"],
+        message_type="image",
+    )
+
+
+@app.post("/analyze", response_model=MisinformationResponse)
+async def analyze_message(
+    text: Optional[str] = Form(None), file: Optional[UploadFile] = File(None)
+):
+    """
+    Unified endpoint to analyze either text or image message
+    """
+    if file:
+        return await analyze_image(file)
+    elif text:
+        return await analyze_text(TextMessage(text=text))
+    else:
+        raise HTTPException(
+            status_code=400, detail="Either text or image file must be provided"
+        )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
