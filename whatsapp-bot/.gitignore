@@ -1,0 +1,14 @@
+# Environment
+.env
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Binary
+whatsapp-bot
+
+# IDE
+.idea/
+.vscode/

@@ -1,57 +1,45 @@
-import random
 from typing import Dict
+from services.agent import analyze_with_agent, detect_if_news
 
 
-def classify_misinformation(text: str) -> Dict[str, any]:
+async def classify_misinformation(text: str) -> Dict[str, any]:
     """
-    Classify text for misinformation detection
+    Classify text for misinformation detection using AI agent with tools.
 
-    Currently uses a simulated random classifier.
-    TODO: Replace with actual trained model
+    First checks if the text is news/fact-checkable content.
+    If yes, uses an AI agent with search tools to verify claims.
+    If no, returns early indicating it's not news.
 
     Args:
         text: Text to classify
 
     Returns:
-        Dictionary containing classification result and confidence score
+        Dictionary containing classification result, confidence score, and details
     """
-    # SIMULATED CLASSIFIER - Returns random True/False
-    # This is a placeholder until a real model is trained
-
-    is_misinformation = random.choice([True, False])
-
-    # Generate a confidence score (random between 0.5 and 0.95)
-    # Higher confidence for demonstration purposes
-    confidence = round(random.uniform(0.5, 0.95), 2)
-
-    return {"is_misinformation": is_misinformation, "confidence": confidence}
-
-
-# Future implementation placeholder
-def classify_misinformation_with_model(text: str) -> Dict[str, any]:
-    """
-    Future implementation with actual trained model
-
-    This function will be used once a model is trained on misinformation data.
-    Expected workflow:
-    1. Preprocess text (tokenization, normalization)
-    2. Load trained model (e.g., BERT, RoBERTa fine-tuned on misinformation dataset)
-    3. Generate embeddings
-    4. Predict classification
-    5. Return results with confidence score
-
-    Args:
-        text: Text to classify
-
-    Returns:
-        Dictionary containing classification result and confidence score
-    """
-    # TODO: Implement actual model inference
-    # Example structure:
-    # model = load_model("misinformation_classifier")
-    # preprocessed = preprocess_text(text)
-    # prediction = model.predict(preprocessed)
-    # confidence = model.predict_proba(preprocessed).max()
-    # return {"is_misinformation": bool(prediction), "confidence": confidence}
-
-    pass
+    # Step 1: Check if this is news or a fact-checkable claim
+    news_check = await detect_if_news(text)
+    
+    if not news_check.get("is_news", False):
+        # Not news - return early
+        return {
+            "is_misinformation": False,
+            "confidence": 0.0,
+            "is_news": False,
+            "summary": news_check.get("reason", "This doesn't appear to be news or a fact-checkable claim."),
+            "evidence": [],
+            "sources_checked": [],
+            "recommendation": "No fact-check needed for this type of message."
+        }
+    
+    # Step 2: It's news - run the fact-checking agent
+    result = await analyze_with_agent(text)
+    
+    return {
+        "is_misinformation": result["is_misinformation"],
+        "confidence": result["confidence"],
+        "is_news": True,
+        "summary": result.get("summary", ""),
+        "evidence": result.get("evidence", []),
+        "sources_checked": result.get("sources_checked", []),
+        "recommendation": result.get("recommendation", "")
+    }

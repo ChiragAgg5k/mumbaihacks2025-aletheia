@@ -1,7 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import os
 from dotenv import load_dotenv
 
@@ -29,6 +29,11 @@ class TextMessage(BaseModel):
 class MisinformationResponse(BaseModel):
     is_misinformation: bool
     confidence: float
+    is_news: Optional[bool] = True
+    summary: Optional[str] = None
+    evidence: Optional[List[str]] = None
+    sources_checked: Optional[List[str]] = None
+    recommendation: Optional[str] = None
     extracted_text: Optional[str] = None
     image_description: Optional[str] = None
     message_type: str
@@ -42,13 +47,18 @@ async def root():
 @app.post("/analyze/text", response_model=MisinformationResponse)
 async def analyze_text(message: TextMessage):
     """
-    Analyze text message for misinformation
+    Analyze text message for misinformation using AI agent with search tools
     """
-    result = classify_misinformation(message.text)
+    result = await classify_misinformation(message.text)
 
     return MisinformationResponse(
         is_misinformation=result["is_misinformation"],
         confidence=result["confidence"],
+        is_news=result.get("is_news", True),
+        summary=result.get("summary"),
+        evidence=result.get("evidence"),
+        sources_checked=result.get("sources_checked"),
+        recommendation=result.get("recommendation"),
         message_type="text",
     )
 
@@ -70,11 +80,15 @@ async def analyze_image(file: UploadFile = File(...)):
 
     combined_text = f"{image_result['ocr_text']} {image_result['description']}"
 
-    result = classify_misinformation(combined_text)
+    result = await classify_misinformation(combined_text)
 
     return MisinformationResponse(
         is_misinformation=result["is_misinformation"],
         confidence=result["confidence"],
+        summary=result.get("summary"),
+        evidence=result.get("evidence"),
+        sources_checked=result.get("sources_checked"),
+        recommendation=result.get("recommendation"),
         extracted_text=image_result["ocr_text"],
         image_description=image_result["description"],
         message_type="image",

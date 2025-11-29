@@ -102,12 +102,17 @@ async def analyze_message(update: Update, text: str) -> None:
     if result is None:
         await update.message.reply_text(
             "❌ **Error**\n\nCould not connect to the analysis backend. Please try again later.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_to_message_id=update.message.message_id
         )
         return
     
     is_misinfo = result.get("is_misinformation", False)
     confidence = result.get("confidence", 0)
+    summary = result.get("summary", "")
+    evidence = result.get("evidence", [])
+    sources = result.get("sources_checked", [])
+    recommendation = result.get("recommendation", "")
     
     # Build response
     if is_misinfo:
@@ -124,9 +129,33 @@ async def analyze_message(update: Update, text: str) -> None:
 **Confidence:** [{confidence_bar}] {confidence:.0%}
 """
     
-    response += "\n_Remember: Always verify important news from multiple credible sources._"
+    if summary:
+        response += f"\n**Summary:**\n{summary}\n"
     
-    await update.message.reply_text(response, parse_mode="Markdown")
+    if evidence and len(evidence) > 0:
+        response += "\n**Evidence:**\n"
+        for e in evidence[:3]:  # Limit to 3 items
+            response += f"• {e}\n"
+    
+    if sources and len(sources) > 0:
+        response += "\n**Sources:**\n"
+        for s in sources[:3]:  # Limit to 3 items
+            # If it's a URL, make it clickable
+            if s.startswith("http"):
+                response += f"• {s}\n"
+            else:
+                response += f"• {s}\n"
+    
+    if recommendation:
+        response += f"\n**Recommendation:**\n{recommendation}\n"
+    
+    response += "\n_Always verify important news from multiple credible sources._"
+    
+    await update.message.reply_text(
+        response,
+        parse_mode="Markdown",
+        reply_to_message_id=update.message.message_id
+    )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
