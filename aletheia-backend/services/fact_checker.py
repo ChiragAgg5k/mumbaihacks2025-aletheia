@@ -40,6 +40,22 @@ class FactChecker:
         Returns:
             Dictionary with verification results
         """
+        # Step 0: Quick check if this is news/fact-checkable content
+        is_news_result = await self._is_news_content(text)
+        
+        if not is_news_result.get("is_news", False):
+            return {
+                "is_misinformation": False,
+                "confidence": 0.0,
+                "is_news": False,
+                "verdict": "NOT_NEWS",
+                "summary": is_news_result.get("reason", "This doesn't appear to be news or a fact-checkable claim."),
+                "evidence": [],
+                "sources_checked": [],
+                "recommendation": "No fact-check needed for this type of message.",
+                "success": True
+            }
+        
         # Step 1: Use Perplexity to search for facts about this claim
         search_result = await self._perplexity_search(text)
         
@@ -47,6 +63,57 @@ class FactChecker:
         analysis = await self._analyze_with_openai(text, search_result)
         
         return analysis
+    
+    def _is_news_content_sync(self, text: str) -> Dict[str, Any]:
+        """Synchronous check if text is news content."""
+        response = self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You determine if a message contains news, claims, or fact-checkable information.
+
+Return JSON: {"is_news": true/false, "reason": "brief explanation"}
+
+is_news = TRUE for:
+- News headlines or articles
+- Claims about events, people, politics, science
+- Forwarded messages with factual claims
+- Statistics or data claims
+- Health/medical claims
+
+is_news = FALSE for:
+- Casual greetings (hi, hello, good morning)
+- Personal messages (how are you, what's up)
+- Questions without claims
+- Opinions without factual claims
+- Random text or gibberish
+- Commands or requests
+
+Return ONLY JSON."""
+                },
+                {"role": "user", "content": f"Is this news/fact-checkable?\n\n\"{text}\""}
+            ],
+            temperature=0.1,
+            max_tokens=100
+        )
+        
+        content = response.choices[0].message.content.strip()
+        
+        # Parse JSON
+        if content.startswith("```"):
+            content = re.sub(r'^```(?:json)?\n?', '', content)
+            content = re.sub(r'\n?```$', '', content)
+        
+        return json.loads(content)
+    
+    async def _is_news_content(self, text: str) -> Dict[str, Any]:
+        """Quick check if text is news/fact-checkable content."""
+        try:
+            return await asyncio.to_thread(self._is_news_content_sync, text)
+        except Exception as e:
+            # If check fails, assume it's news to be safe
+            return {"is_news": True, "reason": f"Check failed: {str(e)}"}
     
     def _perplexity_search_sync(self, claim: str) -> Dict[str, Any]:
         """Synchronous Perplexity search."""

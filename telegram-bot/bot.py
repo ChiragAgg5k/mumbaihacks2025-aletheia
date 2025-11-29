@@ -1,5 +1,4 @@
 import os
-import asyncio
 import logging
 import httpx
 from telegram import Update
@@ -259,13 +258,16 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 
-async def main() -> None:
+def main() -> None:
     """Start the bot."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     
     if not token:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment variables!")
+        print("❌ TELEGRAM_BOT_TOKEN not found in environment variables!")
         return
+    
+    print(f"🤖 Starting Aletheia Telegram Bot...")
+    print(f"📡 Backend URL: {BACKEND_URL}")
     
     # Create the Application
     application = Application.builder().token(token).build()
@@ -277,25 +279,10 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.PHOTO, handle_image))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Initialize and run the bot
-    logger.info("Starting Aletheia Telegram Bot...")
-    async with application:
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        
-        # Keep running until interrupted
-        logger.info("Bot is running. Press Ctrl+C to stop.")
-        try:
-            while True:
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            pass
-        finally:
-            await application.updater.stop()
-            await application.stop()
-            await application.shutdown()
+    # Run the bot
+    print("✅ Bot is running! Press Ctrl+C to stop.")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
