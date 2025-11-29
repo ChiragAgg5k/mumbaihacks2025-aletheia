@@ -213,6 +213,11 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
         
+        # If not news image, silently ignore
+        is_news = result.get("is_news", True)
+        if not is_news:
+            return
+        
         # Format response
         is_misinfo = result.get("is_misinformation", False)
         confidence = result.get("confidence", 0)

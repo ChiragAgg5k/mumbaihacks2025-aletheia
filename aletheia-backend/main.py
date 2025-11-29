@@ -90,6 +90,21 @@ async def analyze_image(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
+    # Check if image contains news content
+    if not image_result.get("is_news", True):
+        return MisinformationResponse(
+            is_misinformation=False,
+            confidence=0.0,
+            is_news=False,
+            summary=image_result.get("description", "This image doesn't appear to contain news or fact-checkable content."),
+            evidence=[],
+            sources_checked=[],
+            recommendation="No fact-check needed for this type of image.",
+            extracted_text="",
+            image_description=image_result.get("description", ""),
+            message_type="image",
+        )
+
     combined_text = f"{image_result['ocr_text']} {image_result['description']}"
 
     result = await classify_misinformation(combined_text)
@@ -97,7 +112,7 @@ async def analyze_image(file: UploadFile = File(...)):
     return MisinformationResponse(
         is_misinformation=result["is_misinformation"],
         confidence=result["confidence"],
-        is_news=result.get("is_news", True),
+        is_news=True,
         summary=result.get("summary"),
         evidence=result.get("evidence"),
         sources_checked=result.get("sources_checked"),

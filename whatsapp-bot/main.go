@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -269,6 +270,12 @@ func handleImageMessage(evt *events.Message) {
 	if err != nil {
 		fmt.Printf("Error analyzing image: %v\n", err)
 		sendMessage(evt, "❌ *Error*\n\nCould not analyze the image. Please try again later.")
+		return
+	}
+	
+	// If not news image, silently ignore
+	if !result.IsNews {
+		fmt.Println("Not news image, ignoring")
 		return
 	}
 	
