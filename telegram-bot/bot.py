@@ -69,7 +69,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     
     text = " ".join(context.args)
-    await analyze_message(update, text)
+    await analyze_message(update, text, force_check=True)
 
 
 async def call_backend_analyze(text: str) -> dict:
@@ -108,7 +108,7 @@ async def call_backend_analyze_image(image_bytes: bytes) -> dict:
         return None
 
 
-async def analyze_message(update: Update, text: str) -> None:
+async def analyze_message(update: Update, text: str, force_check: bool = False) -> None:
     """Analyze text using the backend API."""
     # Send typing indicator
     await update.message.chat.send_action("typing")
@@ -122,6 +122,12 @@ async def analyze_message(update: Update, text: str) -> None:
             parse_mode="Markdown",
             reply_to_message_id=update.message.message_id
         )
+        return
+    
+    # If not news and not a forced check, silently ignore
+    is_news = result.get("is_news", True)
+    if not is_news and not force_check:
+        # Don't respond to non-news messages
         return
     
     is_misinfo = result.get("is_misinformation", False)

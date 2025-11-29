@@ -35,6 +35,7 @@ type AnalyzeRequest struct {
 type AnalyzeResponse struct {
 	IsMisinformation bool     `json:"is_misinformation"`
 	Confidence       float64  `json:"confidence"`
+	IsNews           bool     `json:"is_news"`
 	Summary          string   `json:"summary"`
 	Evidence         []string `json:"evidence"`
 	SourcesChecked   []string `json:"sources_checked"`
@@ -231,6 +232,12 @@ func handleMessage(evt *events.Message) {
 	if err != nil {
 		fmt.Printf("Error analyzing message: %v\n", err)
 		sendMessage(evt, "❌ *Error*\n\nCould not connect to the analysis backend. Please try again later.")
+		return
+	}
+
+	// If not news, silently ignore
+	if !result.IsNews {
+		fmt.Printf("Not news, ignoring: %s\n", text)
 		return
 	}
 
