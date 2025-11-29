@@ -1,15 +1,15 @@
 import os
 import base64
-from mistralai import Mistral
+from openai import OpenAI
 from typing import Dict
 
-api_key = os.getenv("MISTRAL_API_KEY")
-client = Mistral(api_key=api_key) if api_key else None
+api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=api_key) if api_key else None
 
 
 async def process_image(image_data: bytes) -> Dict[str, str]:
     """
-    Process image using Mistral's vision model for OCR and description
+    Process image using GPT-5-mini for OCR and description
 
     Args:
         image_data: Raw image bytes
@@ -18,7 +18,7 @@ async def process_image(image_data: bytes) -> Dict[str, str]:
         Dictionary containing OCR text and image description
     """
     if not client:
-        raise ValueError("MISTRAL_API_KEY not configured")
+        raise ValueError("OPENAI_API_KEY not configured")
 
     base64_image = base64.b64encode(image_data).decode("utf-8")
 
@@ -28,14 +28,14 @@ async def process_image(image_data: bytes) -> Dict[str, str]:
     If there is no text, respond with 'No text found'.
     Only return the extracted text, nothing else."""
 
-    ocr_response = client.chat.complete(
-        model="pixtral-12b-2409",
+    ocr_response = client.chat.completions.create(
+        model="gpt-5-mini",
         messages=[
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": ocr_prompt},
-                    {"type": "image_url", "image_url": image_url},
+                    {"type": "image_url", "image_url": {"url": image_url}},
                 ],
             }
         ],
@@ -47,14 +47,14 @@ async def process_image(image_data: bytes) -> Dict[str, str]:
     Focus on: main subjects, context, setting, any notable elements, and overall theme.
     Keep it concise but informative (2-3 sentences)."""
 
-    description_response = client.chat.complete(
-        model="pixtral-12b-2409",
+    description_response = client.chat.completions.create(
+        model="gpt-5-mini",
         messages=[
             {
                 "role": "user",
                 "content": [
                     {"type": "text", "text": description_prompt},
-                    {"type": "image_url", "image_url": image_url},
+                    {"type": "image_url", "image_url": {"url": image_url}},
                 ],
             }
         ],
