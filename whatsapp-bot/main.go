@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/signal"
@@ -153,10 +154,63 @@ func formatResponse(result *AnalyzeResponse) string {
 	return response
 }
 
+// analyzeImage calls the backend API to analyze an image for misinformation
+func analyzeImage(imageData []byte) (*AnalyzeResponse, error) {
+	// Create multipart form
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	
+	part, err := writer.CreateFormFile("file", "image.jpg")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create form file: %w", err)
+	}
+	
+	_, err = part.Write(imageData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write image data: %w", err)
+	}
+	
+	err = writer.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to close writer: %w", err)
+	}
+	
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/analyze/image", config.BackendURL), &buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call backend: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("backend returned status %d", resp.StatusCode)
+	}
+	
+	var result AnalyzeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	
+	return &result, nil
+}
+
 // handleMessage processes incoming messages
 func handleMessage(evt *events.Message) {
-	// Get the message text
 	msg := evt.Message
+	
+	// Check for image message
+	if msg.GetImageMessage() != nil {
+		handleImageMessage(evt)
+		return
+	}
+	
+	// Get the message text
 	text := ""
 
 	if msg.GetConversation() != "" {
@@ -180,6 +234,36 @@ func handleMessage(evt *events.Message) {
 		return
 	}
 
+	// Send the response
+	response := formatResponse(result)
+	sendMessage(evt, response)
+}
+
+// handleImageMessage processes incoming image messages
+func handleImageMessage(evt *events.Message) {
+	fmt.Printf("Received image from %s\n", evt.Info.Sender.String())
+	
+	imgMsg := evt.Message.GetImageMessage()
+	if imgMsg == nil {
+		return
+	}
+	
+	// Download the image
+	data, err := client.Download(context.Background(), imgMsg)
+	if err != nil {
+		fmt.Printf("Error downloading image: %v\n", err)
+		sendMessage(evt, "❌ *Error*\n\nCould not download the image. Please try again.")
+		return
+	}
+	
+	// Analyze the image
+	result, err := analyzeImage(data)
+	if err != nil {
+		fmt.Printf("Error analyzing image: %v\n", err)
+		sendMessage(evt, "❌ *Error*\n\nCould not analyze the image. Please try again later.")
+		return
+	}
+	
 	// Send the response
 	response := formatResponse(result)
 	sendMessage(evt, response)

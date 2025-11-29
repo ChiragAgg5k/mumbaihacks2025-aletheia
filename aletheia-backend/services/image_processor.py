@@ -29,7 +29,7 @@ async def process_image(image_data: bytes) -> Dict[str, str]:
     Only return the extracted text, nothing else."""
 
     ocr_response = client.chat.completions.create(
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "user",
@@ -48,7 +48,7 @@ async def process_image(image_data: bytes) -> Dict[str, str]:
     Keep it concise but informative (2-3 sentences)."""
 
     description_response = client.chat.completions.create(
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "user",

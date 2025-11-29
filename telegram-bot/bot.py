@@ -91,6 +91,24 @@ async def call_backend_analyze(text: str) -> dict:
         return None
 
 
+async def call_backend_analyze_image(image_bytes: bytes) -> dict:
+    """Call the backend API to analyze image for misinformation."""
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
+                f"{BACKEND_URL}/analyze/image",
+                files={"file": ("image.jpg", image_bytes, "image/jpeg")}
+            )
+            response.raise_for_status()
+            return response.json()
+    except httpx.TimeoutException:
+        logger.error("Backend image request timed out")
+        return None
+    except Exception as e:
+        logger.error(f"Error calling backend for image: {e}")
+        return None
+
+
 async def analyze_message(update: Update, text: str) -> None:
     """Analyze text using the backend API."""
     # Send typing indicator
@@ -159,13 +177,86 @@ async def analyze_message(update: Update, text: str) -> None:
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming messages."""
+    """Handle incoming text messages."""
     text = update.message.text
     
     if not text or len(text.strip()) < 10:
         return  # Ignore very short messages
     
     await analyze_message(update, text)
+
+
+async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle incoming images."""
+    # Send typing indicator
+    await update.message.chat.send_action("typing")
+    
+    try:
+        # Get the largest photo size
+        photo = update.message.photo[-1]
+        file = await context.bot.get_file(photo.file_id)
+        image_bytes = await file.download_as_bytearray()
+        
+        # Call backend
+        result = await call_backend_analyze_image(bytes(image_bytes))
+        
+        if result is None:
+            await update.message.reply_text(
+                "❌ **Error**\n\nCould not analyze the image. Please try again later.",
+                parse_mode="Markdown",
+                reply_to_message_id=update.message.message_id
+            )
+            return
+        
+        # Format response
+        is_misinfo = result.get("is_misinformation", False)
+        confidence = result.get("confidence", 0)
+        summary = result.get("summary", "")
+        extracted_text = result.get("extracted_text", "")
+        image_desc = result.get("image_description", "")
+        recommendation = result.get("recommendation", "")
+        
+        if is_misinfo:
+            emoji = "🚨" if confidence > 0.7 else "⚠️"
+            status = "LIKELY MISINFORMATION" if confidence > 0.7 else "POTENTIALLY MISLEADING"
+        else:
+            emoji = "✅"
+            status = "APPEARS CREDIBLE"
+        
+        confidence_bar = "█" * int(confidence * 10) + "░" * (10 - int(confidence * 10))
+        
+        response = f"""{emoji} **{status}**
+
+**Confidence:** [{confidence_bar}] {confidence:.0%}
+"""
+        
+        if summary:
+            response += f"\n**Summary:**\n{summary}\n"
+        
+        if extracted_text and extracted_text != "No text found":
+            text_preview = extracted_text[:200] + "..." if len(extracted_text) > 200 else extracted_text
+            response += f"\n**Text in Image:**\n_{text_preview}_\n"
+        
+        if image_desc:
+            response += f"\n**Image Description:**\n{image_desc}\n"
+        
+        if recommendation:
+            response += f"\n**Recommendation:**\n{recommendation}\n"
+        
+        response += "\n_Always verify important news from multiple credible sources._"
+        
+        await update.message.reply_text(
+            response,
+            parse_mode="Markdown",
+            reply_to_message_id=update.message.message_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Error handling image: {e}")
+        await update.message.reply_text(
+            "❌ **Error**\n\nFailed to process the image. Please try again.",
+            parse_mode="Markdown"
+        )
 
 
 async def main() -> None:
@@ -183,6 +274,7 @@ async def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("check", check_command))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_image))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Initialize and run the bot
