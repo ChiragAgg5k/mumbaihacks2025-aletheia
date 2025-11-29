@@ -182,15 +182,16 @@ func analyzeImage(imageData []byte) (*AnalyzeResponse, error) {
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call backend: %w", err)
 	}
 	defer resp.Body.Close()
 	
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("backend returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("backend returned status %d: %s", resp.StatusCode, string(body))
 	}
 	
 	var result AnalyzeResponse
