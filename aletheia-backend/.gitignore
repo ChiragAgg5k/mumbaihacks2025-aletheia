@@ -1,7 +1,7 @@
 # Environment variables
 .env
 .env.local
-
+*.csv
 # Python
 __pycache__/
 *.py[cod]
